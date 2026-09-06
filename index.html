@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="منصة أ/ أحمد عكاشة لتعليم اللغة العربية">
+  <meta name="theme-color" content="#059669">
+  
+  <title>منصة أ/ أحمد عكاشة - اللغة العربية</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* المتغيرات والتنسيقات الأساسية */
+    :root {
+      --primary: #059669;
+      --primary-dark: #047857;
+      --bg: #f3f4f6;
+      --card: #ffffff;
+      --danger: #ef4444;
+      --success: #10b981;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+    }
+
+    * { box-sizing: border-box; font-family: 'Cairo', sans-serif; margin: 0; padding: 0; }
+    body { background-color: var(--bg); color: var(--text); padding-bottom: 50px; line-height: 1.7; }
+    
+    header { background: linear-gradient(135deg, #065f46, #047857); color: white; padding: 30px 20px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    header h1 { font-size: 2rem; margin-bottom: 5px; }
+    header p { font-size: 1.1rem; opacity: 0.9; }
+
+    nav { display: flex; justify-content: center; gap: 8px; margin: 20px 0; flex-wrap: wrap; padding: 0 15px; }
+    nav button { background: white; border: 1px solid #cbd5e1; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: all 0.3s; }
+    nav button:hover, nav button.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    .container { max-width: 900px; margin: 0 auto; padding: 0 15px; }
+    .card { background: var(--card); padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 5px; font-weight: 600; color: #374151; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.95rem; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(5,150,105,0.1); }
+    
+    .btn { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%; transition: all 0.3s; }
+    .btn:hover:not(:disabled) { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(5,150,105,0.3); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-danger { background: var(--danger) !important; }
+    .btn-secondary { background: #64748b; }
+
+    .alert { padding: 12px; border-radius: 6px; margin-bottom: 15px; font-weight: bold; animation: slideIn 0.3s ease-in-out; }
+    @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .alert-success { background: #d1fae5; color: #065f46; border-right: 4px solid var(--success); }
+    .alert-error { background: #fee2e2; color: #991b1b; border-right: 4px solid var(--danger); }
+
+    .hidden { display: none !important; }
+    
+    .table-wrapper { overflow-x: auto; width: 100%; }
+    .table { width: 100%; border-collapse: collapse; margin-top: 10px; min-width: 600px; }
+    .table th, .table td { border: 1px solid var(--border); padding: 10px; text-align: right; }
+    .table th { background: #f9fafb; font-weight: 600; }
+    
+    .video-container { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; margin: 15px 0; border-radius: 8px; background: #000; }
+    .video-container iframe { position: absolute; top: 0; right: 0; width: 100%; height: 100%; border: 0; }
+    
+    .pdf-link, .drive-link { display: inline-block; padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 10px; margin-left: 5px; color: white;}
+    .pdf-link { background: var(--danger); }
+    .drive-link { background: #2563eb; }
+
+    .lesson-card, .exam-card, .question-box { background: #f9fafb; border: 1px solid var(--border); padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+    .exam-option { display: block; margin: 7px 0; padding: 8px; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
+    .exam-option:hover { background: #ecfdf5; }
+    .exam-option input { margin-left: 8px; }
+    
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+    .stat-card { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; padding: 20px; border-radius: 8px; text-align: center; }
+    
+    .user-info { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; }
+    .result-score { color: var(--primary); font-size: 1.6rem; margin-top: 15px; text-align: center;}
+    
+    @media (max-width: 600px) {
+      header h1 { font-size: 1.5rem; }
+      nav button { padding: 8px 10px; font-size: 0.85rem; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <h1>📚 منصة أ/ أحمد عكاشة</h1>
+    <p>شرح - اختبارات تفاعلية - مراجعات شاملة</p>
+  </header>
+
+  <nav>
+    <button onclick="showTab('register')" id="tab-register" class="active">طلب انضمام طالب</button>
+    <button onclick="showTab('login')" id="tab-login">تسجيل الدخول</button>
+    <button onclick="showTab('lessons')" id="tab-lessons" class="hidden">📖 الدروس</button>
+    <button onclick="showTab('exams')" id="tab-exams" class="hidden">📝 الامتحانات</button>
+    <button onclick="showTab('admin')" id="tab-admin" class="hidden">👑 لوحة المعلم</button>
+    <button onclick="logout()" id="tab-logout" class="hidden" style="background:#ef4444; color:white;">🚪 خروج</button>
+  </nav>
+
+  <div class="container">
+    <div id="alertBox" class="alert hidden"></div>
+    <div id="userInfo" class="user-info hidden"></div>
+
+    <!-- تسجيل طالب جديد -->
+    <div id="section-register" class="card">
+      <h2>📋 تسجيل طالب جديد</h2>
+      <form id="registerForm">
+        <div class="form-group"><label>الاسم الرباعي</label><input type="text" id="regName" required></div>
+        <div class="form-group"><label>رقم هاتف الطالب</label><input type="tel" id="regPhone" required></div>
+        <div class="form-group"><label>رقم هاتف ولي الأمر</label><input type="tel" id="regParentPhone"></div>
+        <div class="form-group">
+          <label>المرحلة الدراسية</label>
+          <select id="regStage" onchange="updateGrades('regStage', 'regGrade')" required>
+            <option value="">اختر المرحلة</option>
+            <option value="المرحلة الابتدائية">المرحلة الابتدائية</option>
+            <option value="المرحلة الإعدادية">المرحلة الإعدادية</option>
+            <option value="المرحلة الثانوية">المرحلة الثانوية</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>الصف الدراسي</label>
+          <select id="regGrade" required><option value="">اختر الصف أولاً</option></select>
+        </div>
+        <div class="form-group"><label>اسم المستخدم (إنجليزي فقط)</label><input type="text" id="regUsername" required></div>
+        <div class="form-group"><label>كلمة المرور</label><input type="password" id="regPassword" required minlength="8"></div>
+        <button type="submit" class="btn" id="registerBtn">✅ إرسال طلب الانضمام</button>
+      </form>
+    </div>
+
+    <!-- تسجيل الدخول -->
+    <div id="section-login" class="card hidden">
+      <h2>🔐 تسجيل الدخول</h2>
+      <form id="loginForm">
+        <div class="form-group"><label>اسم المستخدم</label><input type="text" id="loginUsername" required></div>
+        <div class="form-group"><label>كلمة المرور</label><input type="password" id="loginPassword" required></div>
+        <button type="submit" class="btn" id="loginBtn">🔓 دخول</button>
+      </form>
+    </div>
+
+    <!-- الدروس -->
+    <div id="section-lessons" class="card hidden">
+      <h2>📖 الدروس التعليمية</h2>
+      <div id="lessonsList">جاري تحميل الدروس...</div>
+    </div>
+
+    <!-- الامتحانات -->
+    <div id="section-exams" class="card hidden">
+      <div id="examsListArea">
+        <h2>📝 الامتحانات التفاعلية</h2>
+        <div id="examsList">جاري تحميل الامتحانات...</div>
+      </div>
+      <div id="activeExamArea" class="hidden"></div>
+    </div>
+
+    <!-- لوحة المعلم -->
+    <div id="section-admin" class="card hidden">
+      <h2>👑 لوحة المعلم</h2>
+      <div class="stats-grid" id="statsGrid"></div>
+
+      <h3>📊 طلبات الانضمام المعلقة</h3>
+      <div class="table-wrapper">
+        <table class="table">
+          <thead><tr><th>الاسم</th><th>الصف</th><th>الهاتف</th><th>الإجراء</th></tr></thead>
+          <tbody id="pendingStudentsTable"></tbody>
+        </table>
+      </div>
+      <hr>
+
+      <h3>👥 الطلاب المسجلين</h3>
+      <div class="table-wrapper">
+        <table class="table">
+          <thead><tr><th>الاسم</th><th>الصف</th><th>الهاتف</th><th>الإجراء</th></tr></thead>
+          <tbody id="approvedStudentsTable"></tbody>
+        </table>
+      </div>
+      <hr>
+
+      <h3>➕ إضافة درس جديد</h3>
+      <form id="addLessonForm">
+        <div class="form-group"><label>عنوان الدرس</label><input type="text" id="lessonTitle" required></div>
+        <div class="form-group">
+          <label>المرحلة</label>
+          <select id="lessonStage" onchange="updateGrades('lessonStage', 'lessonGrade')" required>
+            <option value="">اختر المرحلة</option>
+            <option value="المرحلة الابتدائية">المرحلة الابتدائية</option>
+            <option value="المرحلة الإعدادية">المرحلة الإعدادية</option>
+            <option value="المرحلة الثانوية">المرحلة الثانوية</option>
+          </select>
+        </div>
+        <div class="form-group"><label>الصف</label><select id="lessonGrade" required><option value="">اختر الصف</option></select></div>
+        <div class="form-group"><label>رابط يوتيوب</label><input type="url" id="lessonVideo"></div>
+        <div class="form-group"><label>رابط Google Drive</label><input type="url" id="lessonDrive"></div>
+        <div class="form-group"><label>ملف PDF (اختياري)</label><input type="file" id="lessonPdfFile" accept=".pdf"></div>
+        <div class="form-group"><label>المحتوى النصي</label><textarea id="lessonContent" rows="3"></textarea></div>
+        <button type="submit" class="btn" id="addLessonBtn">📤 نشر الدرس</button>
+      </form>
+      <div id="adminLessonsList" style="margin-top: 15px;"></div>
+      <hr>
+
+      <h3>➕ إنشاء امتحان</h3>
+      <form id="addExamForm">
+        <div class="form-group"><label>عنوان الامتحان</label><input type="text" id="examTitle" required></div>
+        <div class="form-group">
+          <label>المرحلة</label>
+          <select id="examStage" onchange="updateGrades('examStage', 'examGrade')" required>
+            <option value="">اختر المرحلة</option>
+            <option value="المرحلة الابتدائية">المرحلة الابتدائية</option>
+            <option value="المرحلة الإعدادية">المرحلة الإعدادية</option>
+            <option value="المرحلة الثانوية">المرحلة الثانوية</option>
+          </select>
+        </div>
+        <div class="form-group"><label>الصف</label><select id="examGrade" required><option value="">اختر الصف</option></select></div>
+        
+        <div id="questionsContainer"></div>
+        <button type="button" onclick="addQuestionField()" class="btn btn-secondary" style="margin-bottom:15px; width:auto;">➕ إضافة سؤال</button>
+        <button type="submit" class="btn" id="addExamBtn">📤 نشر الامتحان</button>
+      </form>
+      <div id="adminExamsList" style="margin-top: 15px;"></div>
+      <hr>
+
+      <h3>📊 نتائج الطلاب</h3>
+      <div class="table-wrapper">
+        <table class="table">
+          <thead><tr><th>الطالب</th><th>الامتحان</th><th>الدرجة</th><th>التاريخ</th></tr></thead>
+          <tbody id="resultsTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* 
+     * ==========================================
+     * إعدادات الخادم (Backend API URL)
+     * ==========================================
+     */
+    
+    // 🔥 ضع رابط الباك إند الخاص بك على Vercel هنا:
+    const PRODUCTION_API_URL = 'https://YOUR-BACKEND-PROJECT.vercel.app/api'; 
+    
+    const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    // يتم التبديل تلقائياً بين السيرفر المحلي وسيرفر الإنترنت
+    const API_URL = IS_LOCAL ? 'http://localhost:5000/api' : PRODUCTION_API_URL;
+
+    let currentUser = null;
+
+    const gradesByStage = {
+      "المرحلة الابتدائية": ["الصف الرابع الابتدائي", "الصف الخامس الابتدائي", "الصف السادس الابتدائي"],
+      "المرحلة الإعدادية": ["الصف الأول الإعدادي", "الصف الثاني الإعدادي", "الصف الثالث الإعدادي"],
+      "المرحلة الثانوية": ["الصف الأول الثانوي", "الصف الثاني الثانوي", "الصف الثالث الثانوي"]
+    };
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[tag]));
+    }
+
+    function formatYoutubeUrl(url) {
+      if (!url) return '';
+      const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+      return match ? `https://www.youtube.com/embed/${match[1]}` : '';
+    }
+
+    function showAlert(message, isError = false) {
+      const box = document.getElementById('alertBox');
+      box.textContent = message;
+      box.className = `alert ${isError ? 'alert-error' : 'alert-success'}`;
+      box.classList.remove('hidden');
+      setTimeout(() => box.classList.add('hidden'), 4000);
+    }
+
+    async function apiFetch(endpoint, options = {}) {
+      const token = localStorage.getItem('token');
+      const headers = { ...(options.headers || {}) };
+      if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+      }
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_URL}${endpoint}`, { ...options, headers });
+      const data = await res.json().catch(() => ({}));
+      
+      if (res.status === 401) { logout(); throw new Error('انتهت جلسة الدخول'); }
+      if (!res.ok) throw new Error(data.message || 'حدث خطأ غير متوقع');
+      return data;
+    }
+
+    function updateGrades(stageId, gradeId) {
+      const stage = document.getElementById(stageId).value;
+      const gradeSelect = document.getElementById(gradeId);
+      gradeSelect.innerHTML = '<option value="">اختر الصف</option>';
+      if (gradesByStage[stage]) {
+        gradesByStage[stage].forEach(g => {
+          gradeSelect.innerHTML += `<option value="${g}">${g}</option>`;
+        });
+      }
+    }
+
+    function showTab(tab) {
+      document.querySelectorAll('.container > .card').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('nav button').forEach(el => el.classList.remove('active'));
+      document.getElementById(`section-${tab}`).classList.remove('hidden');
+      document.getElementById(`tab-${tab}`).classList.add('active');
+
+      if (tab === 'admin' && currentUser?.role === 'admin') loadAdminData();
+      if (tab === 'lessons') loadLessons();
+      if (tab === 'exams') {
+        document.getElementById('examsListArea').classList.remove('hidden');
+        document.getElementById('activeExamArea').classList.add('hidden');
+        loadExams();
+      }
+    }
+
+    function updateNav() {
+      const logged = !!currentUser;
+      const admin = logged && currentUser.role === 'admin';
+      
+      document.getElementById('tab-register').classList.toggle('hidden', logged);
+      document.getElementById('tab-login').classList.toggle('hidden', logged);
+      document.getElementById('tab-lessons').classList.toggle('hidden', !logged);
+      document.getElementById('tab-exams').classList.toggle('hidden', !logged);
+      document.getElementById('tab-admin').classList.toggle('hidden', !admin);
+      document.getElementById('tab-logout').classList.toggle('hidden', !logged);
+
+      const ui = document.getElementById('userInfo');
+      if (logged) { ui.textContent = `مرحباً بك: ${currentUser.name}`; ui.classList.remove('hidden'); }
+      else { ui.classList.add('hidden'); }
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      currentUser = null;
+      updateNav();
+      showTab('login');
+    }
+
+    // --- Authentication ---
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await apiFetch('/register', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: document.getElementById('regName').value,
+            phone: document.getElementById('regPhone').value,
+            parentPhone: document.getElementById('regParentPhone').value,
+            stage: document.getElementById('regStage').value,
+            grade: document.getElementById('regGrade').value,
+            username: document.getElementById('regUsername').value,
+            password: document.getElementById('regPassword').value
+          })
+        });
+        showAlert('تم التسجيل! بانتظار موافقة المعلم.');
+        e.target.reset();
+      } catch (err) { showAlert(err.message, true); }
+    });
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const data = await apiFetch('/login', {
+          method: 'POST',
+          body: JSON.stringify({
+            username: document.getElementById('loginUsername').value,
+            password: document.getElementById('loginPassword').value
+          })
+        });
+        localStorage.setItem('token', data.token);
+        currentUser = data.user;
+        updateNav();
+        showTab(currentUser.role === 'admin' ? 'admin' : 'lessons');
+      } catch (err) { showAlert(err.message, true); }
+    });
+
+    // --- Student Views ---
+    async function loadLessons() {
+      const list = document.getElementById('lessonsList');
+      try {
+        const lessons = await apiFetch('/lessons');
+        if (!lessons.length) return list.innerHTML = '<p style="text-align:center;">لا توجد دروس حالياً.</p>';
+        
+        list.innerHTML = lessons.map(l => `
+          <div class="lesson-card">
+            <h3 style="color:var(--primary)">${escapeHtml(l.title)}</h3>
+            ${formatYoutubeUrl(l.videoUrl) ? `<div class="video-container"><iframe src="${formatYoutubeUrl(l.videoUrl)}" allowfullscreen></iframe></div>` : ''}
+            <p>${escapeHtml(l.content)}</p>
+            <div style="margin-top:10px;">
+              ${l.pdfUrl ? `<a href="${escapeHtml(l.pdfUrl)}" target="_blank" class="pdf-link">📄 عرض الـ PDF</a>` : ''}
+              ${l.driveUrl ? `<a href="${escapeHtml(l.driveUrl)}" target="_blank" class="drive-link">📁 Google Drive</a>` : ''}
+            </div>
+          </div>
+        `).join('');
+      } catch (e) { list.innerHTML = 'خطأ في جلب الدروس.'; }
+    }
+
+    async function loadExams() {
+      const list = document.getElementById('examsList');
+      try {
+        const exams = await apiFetch('/exams');
+        if (!exams.length) return list.innerHTML = '<p style="text-align:center;">لا توجد امتحانات حالياً.</p>';
+        list.innerHTML = exams.map(e => `
+          <div class="exam-card">
+            <h3 style="color:var(--primary)">${escapeHtml(e.title)}</h3>
+            <button class="btn" onclick="startExam('${e._id}')">بدء الامتحان</button>
+          </div>
+        `).join('');
+      } catch (e) { list.innerHTML = 'خطأ في جلب الامتحانات.'; }
+    }
+
+    async function startExam(id) {
+      try {
+        const exam = await apiFetch(`/exams/${id}`);
+        document.getElementById('examsListArea').classList.add('hidden');
+        const area = document.getElementById('activeExamArea');
+        area.classList.remove('hidden');
+
+        area.innerHTML = `
+          <h2 style="margin-bottom:15px; color:var(--primary);">${escapeHtml(exam.title)}</h2>
+          <form id="examFormSubmit">
+            ${exam.questions.map((q, i) => `
+              <div class="question-box">
+                <h4>${i+1}- ${escapeHtml(q.questionText)}</h4>
+                ${q.options.map((opt, oIdx) => `
+                  <label class="exam-option"><input type="radio" name="q_${i}" value="${oIdx}" required> ${escapeHtml(opt)}</label>
+                `).join('')}
+              </div>
+            `).join('')}
+            <button type="submit" class="btn">تسليم الإجابات</button>
+          </form>
+        `;
+
+        document.getElementById('examFormSubmit').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const answers = exam.questions.map((_, i) => {
+            const sel = document.querySelector(`input[name="q_${i}"]:checked`);
+            return sel ? parseInt(sel.value) : -1;
+          });
+          
+          try {
+            const res = await apiFetch(`/exams/${id}/submit`, { method: 'POST', body: JSON.stringify({ answers }) });
+            area.innerHTML = `<div class="card"><h2 style="text-align:center;">تم التسليم بنجاح!</h2><div class="result-score">${res.score} / ${res.totalScore}</div><p style="text-align:center; margin-top:10px;"><button class="btn btn-secondary" onclick="showTab('exams')">عودة للامتحانات</button></p></div>`;
+          } catch(err) { showAlert(err.message, true); }
+        });
+      } catch (e) { showAlert(e.message, true); }
+    }
+
+    // --- Admin Views ---
+    function loadAdminData() {
+      loadPending(); loadApproved(); loadAdminLessons(); loadAdminExams(); loadStats(); loadResults();
+    }
+
+    async function loadPending() {
+      const tb = document.getElementById('pendingStudentsTable');
+      const users = await apiFetch('/admin/pending-students').catch(()=>[]);
+      tb.innerHTML = users.map(u => `<tr><td>${u.name}</td><td>${u.grade}</td><td>${u.phone}</td><td><button class="btn" style="padding:4px;width:auto;" onclick="apiFetch('/admin/approve-student/${u._id}', {method:'POST'}).then(loadAdminData)">قبول</button></td></tr>`).join('') || '<tr><td colspan="4">لا يوجد.</td></tr>';
+    }
+
+    async function loadApproved() {
+      const tb = document.getElementById('approvedStudentsTable');
+      const users = await apiFetch('/admin/approved-students').catch(()=>[]);
+      tb.innerHTML = users.map(u => `<tr><td>${u.name}</td><td>${u.grade}</td><td>${u.phone}</td><td><button class="btn btn-danger" style="padding:4px;width:auto;" onclick="apiFetch('/admin/students/${u._id}', {method:'DELETE'}).then(loadAdminData)">حذف</button></td></tr>`).join('') || '<tr><td colspan="4">لا يوجد.</td></tr>';
+    }
+
+    async function loadResults() {
+      const tb = document.getElementById('resultsTable');
+      const res = await apiFetch('/admin/results').catch(()=>[]);
+      tb.innerHTML = res.map(r => `<tr><td>${r.studentName}</td><td>${r.examTitle}</td><td>${r.score}/${r.total}</td><td>${new Date(r.createdAt).toLocaleDateString()}</td></tr>`).join('') || '<tr><td colspan="4">لا توجد نتائج.</td></tr>';
+    }
+
+    async function loadStats() {
+      const stats = await apiFetch('/admin/stats').catch(()=>({}));
+      document.getElementById('statsGrid').innerHTML = `
+        <div class="stat-card"><h3>${stats.approvedStudentsCount || 0}</h3><p>الطلاب</p></div>
+        <div class="stat-card"><h3>${stats.pendingStudentsCount || 0}</h3><p>معلق</p></div>
+        <div class="stat-card"><h3>${stats.lessonsCount || 0}</h3><p>الدروس</p></div>
+        <div class="stat-card"><h3>${stats.examsCount || 0}</h3><p>الامتحانات</p></div>
+      `;
+    }
+
+    document.getElementById('addLessonForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData();
+      fd.append('title', document.getElementById('lessonTitle').value);
+      fd.append('stage', document.getElementById('lessonStage').value);
+      fd.append('grade', document.getElementById('lessonGrade').value);
+      fd.append('videoUrl', document.getElementById('lessonVideo').value);
+      fd.append('driveUrl', document.getElementById('lessonDrive').value);
+      fd.append('content', document.getElementById('lessonContent').value);
+      if(document.getElementById('lessonPdfFile').files[0]) fd.append('pdfFile', document.getElementById('lessonPdfFile').files[0]);
+
+      try {
+        await apiFetch('/admin/lessons', { method: 'POST', body: fd });
+        showAlert('تم نشر الدرس بنجاح'); e.target.reset(); loadAdminLessons();
+      } catch(err) { showAlert(err.message, true); }
+    });
+
+    async function loadAdminLessons() {
+      const div = document.getElementById('adminLessonsList');
+      const ls = await apiFetch('/lessons').catch(()=>[]);
+      div.innerHTML = ls.map(l => `<div style="display:flex; justify-content:space-between; background:#fff; padding:10px; margin-bottom:5px; border-radius:5px; border:1px solid #ddd;"><span>${l.title} (${l.grade})</span><button class="btn btn-danger" style="width:auto; padding:5px 10px;" onclick="apiFetch('/admin/lessons/${l._id}', {method:'DELETE'}).then(loadAdminLessons)">حذف</button></div>`).join('');
+    }
+
+    function addQuestionField() {
+      const c = document.getElementById('questionsContainer');
+      const idx = c.children.length;
+      c.insertAdjacentHTML('beforeend', `
+        <div class="question-box" id="qb_${idx}">
+          <label>سؤال ${idx+1}</label><input type="text" class="q-txt" required>
+          <div style="margin-top:10px;">الخيارات (حدد الصحيح):</div>
+          ${[0,1,2,3].map(i => `<div style="display:flex; gap:10px; margin-top:5px;"><input type="radio" name="correct_${idx}" value="${i}" ${i===0?'checked':''}><input type="text" class="q-opt-${i}" placeholder="خيار ${i+1}" required style="flex:1;"></div>`).join('')}
+        </div>
+      `);
+    }
+
+    document.getElementById('addExamForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const qBoxes = document.querySelectorAll('.question-box');
+      if (!qBoxes.length) return showAlert('أضف سؤالاً واحداً على الأقل', true);
+      
+      const questions = Array.from(qBoxes).map((b, i) => ({
+        questionText: b.querySelector('.q-txt').value,
+        options: [0,1,2,3].map(idx => b.querySelector(`.q-opt-${idx}`).value),
+        correctAnswerIndex: parseInt(b.querySelector(`input[name="correct_${i}"]:checked`).value)
+      }));
+
+      try {
+        await apiFetch('/admin/exams', { method: 'POST', body: JSON.stringify({
+          title: document.getElementById('examTitle').value,
+          stage: document.getElementById('examStage').value,
+          grade: document.getElementById('examGrade').value,
+          questions
+        })});
+        showAlert('تم إضافة الامتحان'); e.target.reset(); document.getElementById('questionsContainer').innerHTML=''; loadAdminExams();
+      } catch(err) { showAlert(err.message, true); }
+    });
+
+    async function loadAdminExams() {
+      const div = document.getElementById('adminExamsList');
+      const ex = await apiFetch('/exams').catch(()=>[]);
+      div.innerHTML = ex.map(e => `<div style="display:flex; justify-content:space-between; background:#fff; padding:10px; margin-bottom:5px; border-radius:5px; border:1px solid #ddd;"><span>${e.title} (${e.grade})</span><button class="btn btn-danger" style="width:auto; padding:5px 10px;" onclick="apiFetch('/admin/exams/${e._id}', {method:'DELETE'}).then(loadAdminExams)">حذف</button></div>`).join('');
+    }
+
+    window.onload = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try { const data = await apiFetch('/me'); currentUser = data.user; showTab(currentUser.role==='admin'?'admin':'lessons'); }
+        catch (e) { localStorage.removeItem('token'); }
+      }
+      updateNav();
+    };
+  </script>
+</body>
+</html>
