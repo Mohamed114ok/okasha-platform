@@ -1,1977 +1,437 @@
-require('dotenv').config();
-'use strict';
-
 const express = require('express');
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const helmet = require('helmet');
+const jwt = require('jwt-simple');
+const bcrypt = require('bcryptjs');
 const multer = require('multer');
-const rateLimit = require('express-rate-limit');
-const crypto = require('crypto');
-const { put } = require('@vercel/blob');
+const path = require('path');
 
 const app = express();
 
-// ======================================================
-// المتغيرات
-// ======================================================
+// ==================== 1. الإعدادات والوسائط (Middlewares) ====================
 
-const PORT = Number(process.env.PORT || 5000);
-const NODE_ENV = process.env.NODE_ENV || 'development';
+// السماح بالطلبات من أي مصدر (CORS)
+app.use(cors());
 
-const MONGO_URI =
-  process.env.MONGO_URI ||
-  'mongodb+srv://admin:password@cluster.mongodb.net/okasha?retryWrites=true&w=majority';
+// معالجة بيانات JSON و Form Data
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-const JWT_SECRET =
-  process.env.JWT_SECRET ||
-  'your-secret-key-change-this-in-production';
-
-const FRONTEND_URL =
-  process.env.FRONTEND_URL ||
-  'http://localhost:5000';
-
-// بيانات حساب المعلم
-const ADMIN_USERNAME =
-  process.env.ADMIN_USERNAME || 'admin';
-
-const ADMIN_PASSWORD =
-  process.env.ADMIN_PASSWORD || 'Admin@123456';
-
-
-// ======================================================
-// الأمان
-// ======================================================
-
-app.disable('x-powered-by');
-
+// تعطيل قيود CSP لمنع حظر السكريبتات المباشرة والأزرار في الصفحة
 app.use(
   helmet({
-    crossOriginResourcePolicy: {
-      policy: 'cross-origin'
-    }
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
   })
 );
 
+// معالجة طلب أيقونة المفضلة favicon لمنع خطأ 404
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// ======================================================
-// CORS
-// ======================================================
+// إتاحة قراءة الملفات الثابتة من مجلد public الموجود داخل backend
+const publicDirectoryPath = path.join(__dirname, 'public');
+app.use(express.static(publicDirectoryPath));
 
-const allowedOrigins = FRONTEND_URL
-  .split(',')
-  .map(url => url.trim())
-  .filter(Boolean);
-
-const corsOptions = {
-  origin(origin, callback) {
-    if (
-      !origin ||
-      NODE_ENV !== 'production' ||
-      allowedOrigins.includes(origin)
-    ) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS: Origin غير مسموح به'));
-    }
-  },
-
-  methods: [
-    'GET',
-    'POST',
-    'PUT',
-    'DELETE',
-    'OPTIONS'
-  ],
-
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization'
-  ],
-
-  credentials: false
-};
-
-app.use(cors(corsOptions));
-
-
-// ======================================================
-// Body Parser
-// ======================================================
-
-app.use(
-  express.json({
-    limit: '5mb'
-  })
-);
-
-
-// ======================================================
-// الملفات الثابتة
-// ======================================================
-
-app.use(express.static('public'));
-
-
-// ======================================================
-// Rate Limiting
-// ======================================================
-
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 300,
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-app.use('/api', apiLimiter);
-
-app.use('/api/login', authLimiter);
-
-app.use('/api/register', authLimiter);
-
-
-// ======================================================
-// أدوات مساعدة
-// ======================================================
-
-const cleanString = (value, max = 500) => {
-  return typeof value === 'string'
-    ? value.trim().slice(0, max)
-    : '';
-};
-
-const validObjectId = (id) => {
-  return mongoose.isValidObjectId(id);
-};
-
-const publicUser = (user) => ({
-  _id: user._id,
-  name: user.name,
-  phone: user.phone,
-  stage: user.stage,
-  grade: user.grade,
-  username: user.username,
-  role: user.role,
-  status: user.status
-});
-
-
-// ======================================================
-// قاعدة البيانات
-// ======================================================
-
-let cached = global.__okashaMongo || {
-  conn: null,
-  promise: null
-};
-
-if (!global.__okashaMongo) {
-  global.__okashaMongo = cached;
-}
-
-
-// ======================================================
-// Schemas
-// ======================================================
-
-const userSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-      trim: true
-    },
-
-    phone: {
-      type: String,
-      required: true
-    },
-
-    parentPhone: {
-      type: String
-    },
-
-    stage: {
-      type: String
-    },
-
-    grade: {
-      type: String
-    },
-
-    username: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-      lowercase: true,
-      minlength: 3
-    },
-
-    password: {
-      type: String,
-      required: true,
-      select: false
-    },
-
-    role: {
-      type: String,
-      enum: ['admin', 'student'],
-      default: 'student'
-    },
-
-    status: {
-      type: String,
-      enum: ['pending', 'approved'],
-      default: 'pending'
-    }
-  },
-  {
-    timestamps: true
-  }
-);
-
-
-const lessonSchema = new mongoose.Schema(
-  {
-    title: {
-      type: String,
-      required: true,
-      trim: true
-    },
-
-    stage: {
-      type: String
-    },
-
-    grade: {
-      type: String
-    },
-
-    content: {
-      type: String
-    },
-
-    videoUrl: {
-      type: String
-    },
-
-    pdfUrl: {
-      type: String
-    },
-
-    driveUrl: {
-      type: String
-    },
-
-    views: {
-      type: Number,
-      default: 0
-    }
-  },
-  {
-    timestamps: true
-  }
-);
-
-
-const questionSchema = new mongoose.Schema({
-  questionText: {
-    type: String,
-    required: true
-  },
-
-  options: {
-    type: [String],
-    required: true,
-
-    validate: {
-      validator: (arr) => arr.length === 4,
-      message: 'يجب أن يحتوي السؤال على 4 اختيارات'
-    }
-  },
-
-  correctAnswerIndex: {
-    type: Number,
-    required: true,
-    min: 0,
-    max: 3
-  },
-
-  explanation: {
-    type: String
-  }
-});
-
-
-const examSchema = new mongoose.Schema(
-  {
-    title: {
-      type: String,
-      required: true
-    },
-
-    stage: {
-      type: String
-    },
-
-    grade: {
-      type: String
-    },
-
-    questions: {
-      type: [questionSchema],
-      required: true,
-
-      validate: {
-        validator: (arr) => arr.length >= 1,
-        message: 'يجب أن يحتوي الامتحان على سؤال واحد على الأقل'
-      }
-    },
-
-    duration: {
-      type: Number,
-      default: 60
-    },
-
-    passingScore: {
-      type: Number,
-      default: 60
-    }
-  },
-  {
-    timestamps: true
-  }
-);
-
-
-const resultSchema = new mongoose.Schema(
-  {
-    student: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-
-    studentName: {
-      type: String,
-      required: true
-    },
-
-    exam: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Exam',
-      required: true
-    },
-
-    examTitle: {
-      type: String,
-      required: true
-    },
-
-    score: {
-      type: Number,
-      required: true
-    },
-
-    total: {
-      type: Number,
-      required: true
-    },
-
-    percentage: {
-      type: Number,
-      required: true
-    },
-
-    isPassed: {
-      type: Boolean
-    }
-  },
-  {
-    timestamps: true
-  }
-);
-
-
-// ======================================================
-// Models
-// ======================================================
-
-const User =
-  mongoose.models.User ||
-  mongoose.model('User', userSchema);
-
-const Lesson =
-  mongoose.models.Lesson ||
-  mongoose.model('Lesson', lessonSchema);
-
-const Exam =
-  mongoose.models.Exam ||
-  mongoose.model('Exam', examSchema);
-
-const Result =
-  mongoose.models.Result ||
-  mongoose.model('Result', resultSchema);
-
-
-// ======================================================
-// إنشاء / تجهيز حساب المعلم
-// ======================================================
-
-async function ensureAdminUser() {
-  try {
-    const username = cleanString(
-      ADMIN_USERNAME,
-      40
-    ).toLowerCase();
-
-    if (!username) {
-      throw new Error(
-        'ADMIN_USERNAME غير موجود'
-      );
-    }
-
-    if (!ADMIN_PASSWORD) {
-      throw new Error(
-        'ADMIN_PASSWORD غير موجود'
-      );
-    }
-
-
-    // البحث عن حساب المعلم
-    let admin = await User
-      .findOne({ username })
-      .select('+password');
-
-
-    // ==================================================
-    // الحساب غير موجود → إنشاء حساب جديد
-    // ==================================================
-
-    if (!admin) {
-      const hashedPassword = await bcrypt.hash(
-        ADMIN_PASSWORD,
-        12
-      );
-
-      admin = await User.create({
-        name: 'المعلم',
-
-        phone: 'admin',
-
-        parentPhone: '',
-
-        stage: '',
-
-        grade: '',
-
-        username,
-
-        password: hashedPassword,
-
-        role: 'admin',
-
-        status: 'approved'
-      });
-
-      console.log('');
-      console.log('======================================');
-      console.log('✅ تم إنشاء حساب المعلم بنجاح');
-      console.log(`👤 اسم المستخدم: ${username}`);
-      console.log('🔑 كلمة المرور: موجودة في إعدادات البيئة');
-      console.log('======================================');
-      console.log('');
-
-      return;
-    }
-
-
-    // ==================================================
-    // الحساب موجود لكنه ليس Admin
-    // ==================================================
-
-    if (admin.role !== 'admin') {
-      console.error('');
-      console.error(
-        `❌ المستخدم "${username}" موجود بالفعل لكنه ليس حساب معلم.`
-      );
-      console.error(
-        'غيّر ADMIN_USERNAME في ملف .env إلى اسم مستخدم آخر.'
-      );
-      console.error('');
-
-      return;
-    }
-
-
-    // ==================================================
-    // التأكد من أن الحساب Approved
-    // ==================================================
-
-    if (admin.status !== 'approved') {
-      admin.status = 'approved';
-      await admin.save();
-
-      console.log(
-        '✅ تم اعتماد حساب المعلم'
-      );
-    }
-
-
-    // ==================================================
-    // التأكد من كلمة المرور
-    // ==================================================
-
-    const passwordMatches = await bcrypt.compare(
-      ADMIN_PASSWORD,
-      admin.password
-    );
-
-
-    // إذا كانت كلمة المرور مختلفة → تحديثها
-    if (!passwordMatches) {
-      admin.password = await bcrypt.hash(
-        ADMIN_PASSWORD,
-        12
-      );
-
-      await admin.save();
-
-      console.log(
-        '🔑 تم تحديث كلمة مرور حساب المعلم'
-      );
-    }
-
-
-    console.log(
-      `✅ حساب المعلم جاهز: ${username}`
-    );
-
-  } catch (error) {
-    console.error(
-      '❌ خطأ في تجهيز حساب المعلم:',
-      error.message
-    );
-  }
-}
-
-
-// ======================================================
-// الاتصال بـ MongoDB
-// ======================================================
-
-async function connectDB() {
-
-  if (cached.conn) {
-    return cached.conn;
-  }
-
-
-  if (!cached.promise) {
-
-    cached.promise = mongoose
-      .connect(MONGO_URI, {
-        serverSelectionTimeoutMS: 10000
-      })
-
-      .then(async (m) => {
-
-        console.log('✅ MongoDB متصل');
-
-        // تجهيز حساب المعلم
-        await ensureAdminUser();
-
-        return m;
-      })
-
-      .catch((error) => {
-
-        cached.promise = null;
-
-        console.error(
-          '❌ MongoDB:',
-          error.message
-        );
-
-        throw error;
-      });
-  }
-
-
-  cached.conn = await cached.promise;
-
-  return cached.conn;
-}
-
-
-// ======================================================
-// Middleware
-// ======================================================
-
-const storage = multer.memoryStorage();
-
-
+// إعداد التخزين المؤقت في الذاكرة لتوافق رفع الملفات مع Vercel
 const upload = multer({
-
-  storage,
-
-  fileFilter: (req, file, cb) => {
-
-    if (file.mimetype === 'application/pdf') {
-      cb(null, true);
-    } else {
-      cb(new Error('PDF only'));
-    }
-  },
-
-  limits: {
-    fileSize: 10 * 1024 * 1024
-  }
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 ميجابايت كحد أقصى
 });
 
+// المفتاح السري وتأكيد الاتصال بقاعدة البيانات
+const JWT_SECRET = process.env.JWT_SECRET || 'okasha_secret_key_2026';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/okasha_platform';
 
-// ======================================================
-// Authentication
-// ======================================================
+mongoose
+  .connect(MONGO_URI)
+  .then(() => console.log('✅ تم الاتصال بقاعدة البيانات بنجاح'))
+  .catch((err) => console.error('❌ خطأ في الاتصال بقاعدة البيانات:', err));
 
-const auth = (req, res, next) => {
+// ==================== 2. نماذج قاعدة البيانات (Schemas & Models) ====================
 
+// نموذج المستخدمين (طالب / معلم)
+const userSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  phone: { type: String, required: true },
+  parentPhone: { type: String },
+  stage: { type: String, required: true },
+  grade: { type: String, required: true },
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ['student', 'admin'], default: 'student' },
+  status: { type: String, enum: ['pending', 'approved'], default: 'pending' },
+  createdAt: { type: Date, default: Date.now },
+});
+
+const User = mongoose.model('User', userSchema);
+
+// نموذج الدروس
+const lessonSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  stage: { type: String },
+  grade: { type: String },
+  content: { type: String },
+  videoUrl: { type: String },
+  driveUrl: { type: String },
+  pdfUrl: { type: String },
+  createdAt: { type: Date, default: Date.now },
+});
+
+const Lesson = mongoose.model('Lesson', lessonSchema);
+
+// نموذج الامتحانات
+const examSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  stage: { type: String },
+  grade: { type: String },
+  questions: [
+    {
+      questionText: { type: String, required: true },
+      options: [{ type: String, required: true }],
+      correctAnswerIndex: { type: Number, required: true },
+    },
+  ],
+  createdAt: { type: Date, default: Date.now },
+});
+
+const Exam = mongoose.model('Exam', examSchema);
+
+// نموذج نتائج الامتحانات
+const resultSchema = new mongoose.Schema({
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  studentName: { type: String, required: true },
+  examId: { type: mongoose.Schema.Types.ObjectId, ref: 'Exam', required: true },
+  examTitle: { type: String, required: true },
+  score: { type: Number, required: true },
+  total: { type: Number, required: true },
+  percentage: { type: Number, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
+const Result = mongoose.model('Result', resultSchema);
+
+// ==================== 3. وسائط التوثيق (Auth Middlewares) ====================
+
+const authenticate = async (req, res, next) => {
   try {
-
-    const token =
-      req.headers.authorization
-        ?.replace('Bearer ', '');
-
-
-    if (!token) {
-      return res.status(401).json({
-        message: 'Token مفقود'
-      });
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'يرجى تسجيل الدخول أولاً' });
     }
-
-
-    const decoded = jwt.verify(
-      token,
-      JWT_SECRET
-    );
-
-
-    req.user = decoded;
-
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.decode(token, JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user) return res.status(401).json({ message: 'المستخدم غير موجود' });
+    req.user = user;
     next();
-
-  } catch (error) {
-
-    res.status(401).json({
-      message: 'Token غير صحيح'
-    });
+  } catch (err) {
+    return res.status(401).json({ message: 'رمز التوثيق غير صالح' });
   }
 };
 
-
-// ======================================================
-// Admin Only
-// ======================================================
-
-const adminOnly = (req, res, next) => {
-
-  if (!req.user || req.user.role !== 'admin') {
-
-    return res.status(403).json({
-      message: 'المسؤول فقط'
-    });
+const requireAdmin = (req, res, next) => {
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    res.status(403).json({ message: 'غير مصرح لك بالوصول لهذه الصفحة' });
   }
-
-  next();
 };
 
+// ==================== 4. المسارات البرمجية (API Routes) ====================
 
-// ======================================================
-// Routes
-// ======================================================
-
-
-// ======================================================
-// Health
-// ======================================================
-
-app.get('/api/health', async (req, res) => {
-
-  try {
-
-    await connectDB();
-
-    res.json({
-      ok: true,
-      message: 'الخادم يعمل'
-    });
-
-  } catch (error) {
-
-    res.status(500).json({
-      ok: false,
-      message: 'قاعدة البيانات غير متصلة'
-    });
-  }
-});
-
-
-// ======================================================
-// تسجيل الطلاب
-// ======================================================
-
+// تسجيل طالب جديد
 app.post('/api/register', async (req, res) => {
-
   try {
+    const { name, phone, parentPhone, stage, grade, username, password } = req.body;
+    
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(400).json({ message: 'اسم المستخدم مستخدم بالفعل' });
+    }
 
-    await connectDB();
-
-
-    const {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({
       name,
       phone,
       parentPhone,
       stage,
       grade,
       username,
-      password
-    } = req.body;
-
-
-    const cleanUsername =
-      cleanString(
-        username,
-        40
-      ).toLowerCase();
-
-
-    if (
-      !name ||
-      !phone ||
-      !stage ||
-      !grade ||
-      !cleanUsername ||
-      !password
-    ) {
-
-      return res.status(400).json({
-        message: 'البيانات غير مكتملة'
-      });
-    }
-
-
-    if (password.length < 8) {
-
-      return res.status(400).json({
-        message: 'كلمة مرور قصيرة'
-      });
-    }
-
-
-    const existing =
-      await User.findOne({
-        username: cleanUsername
-      });
-
-
-    if (existing) {
-
-      return res.status(409).json({
-        message: 'اسم المستخدم موجود'
-      });
-    }
-
-
-    const hashedPassword =
-      await bcrypt.hash(
-        password,
-        12
-      );
-
-
-    await User.create({
-
-      name: cleanString(
-        name,
-        100
-      ),
-
-      phone,
-
-      parentPhone:
-        cleanString(
-          parentPhone
-        ),
-
-      stage,
-
-      grade,
-
-      username:
-        cleanUsername,
-
-      password:
-        hashedPassword,
-
-      role:
-        'student',
-
-      status:
-        'pending'
+      password: hashedPassword,
+      role: 'student',
+      status: 'pending',
     });
 
-
-    res.status(201).json({
-
-      message:
-        'تم الطلب، بانتظار الموافقة'
-    });
-
-
-  } catch (error) {
-
-    console.error(
-      'Register:',
-      error
-    );
-
-    res.status(500).json({
-
-      message:
-        'خطأ التسجيل'
-    });
+    await newUser.save();
+    res.status(201).json({ message: 'تم تقديم طلب الانضمام بنجاح وبانتظار موافقة المعلم' });
+  } catch (err) {
+    res.status(500).json({ message: 'حدث خطأ في التسجيل', error: err.message });
   }
 });
 
-
-// ======================================================
 // تسجيل الدخول
-// ======================================================
-
 app.post('/api/login', async (req, res) => {
-
   try {
-
-    await connectDB();
-
-
-    const username =
-      cleanString(
-        req.body.username,
-        40
-      ).toLowerCase();
-
-
-    const password =
-      req.body.password;
-
-
-    if (!username || !password) {
-
-      return res.status(400).json({
-        message: 'اسم المستخدم وكلمة المرور مطلوبان'
-      });
-    }
-
-
-    const user =
-      await User
-        .findOne({
-          username
-        })
-        .select('+password');
-
-
-    if (
-      !user ||
-      !(await bcrypt.compare(
-        password,
-        user.password
-      ))
-    ) {
-
-      return res.status(401).json({
-        message: 'بيانات خاطئة'
-      });
-    }
-
-
-    // الطلاب يجب أن تتم الموافقة عليهم
-    if (
-      user.role === 'student' &&
-      user.status !== 'approved'
-    ) {
-
-      return res.status(403).json({
-        message: 'حسابك قيد الانتظار'
-      });
-    }
-
-
-    const token =
-      jwt.sign(
-
-        {
-          id:
-            String(user._id),
-
-          role:
-            user.role,
-
-          name:
-            user.name,
-
-          grade:
-            user.grade
-        },
-
-        JWT_SECRET,
-
-        {
-          expiresIn:
-            '7d'
-        }
-      );
-
-
-    res.json({
-
-      token,
-
-      user:
-        publicUser(user)
-    });
-
-
-  } catch (error) {
-
-    console.error(
-      'Login:',
-      error
-    );
-
-    res.status(500).json({
-      message: 'خطأ الدخول'
-    });
-  }
-});
-
-
-// ======================================================
-// بيانات المستخدم الحالي
-// ======================================================
-
-app.get('/api/me', auth, async (req, res) => {
-
-  try {
-
-    await connectDB();
-
-
-    const user =
-      await User.findById(
-        req.user.id
-      );
-
+    const { username, password } = req.body;
+    const user = await User.findOne({ username });
 
     if (!user) {
-
-      return res.status(404).json({
-        message: 'غير موجود'
-      });
+      return res.status(400).json({ message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
     }
 
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
+    }
+
+    if (user.role === 'student' && user.status !== 'approved') {
+      return res.status(403).json({ message: 'حسابك ما زال بانتظار موافقة المعلم' });
+    }
+
+    const token = jwt.encode({ id: user._id, role: user.role }, JWT_SECRET);
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        username: user.username,
+        role: user.role,
+        grade: user.grade,
+        stage: user.stage,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'حدث خطأ أثناء تسجيل الدخول', error: err.message });
+  }
+});
+
+// الحصول على بيانات المستخدم الحالي
+app.get('/api/me', authenticate, (req, res) => {
+  res.json({
+    user: {
+      id: req.user._id,
+      name: req.user.name,
+      username: req.user.username,
+      role: req.user.role,
+      grade: req.user.grade,
+      stage: req.user.stage,
+    },
+  });
+});
+
+// جلب قائمة الدروس
+app.get('/api/lessons', authenticate, async (req, res) => {
+  try {
+    const query = req.user.role === 'admin' ? {} : { grade: req.user.grade, stage: req.user.stage };
+    const lessons = await Lesson.find(query).sort({ createdAt: -1 });
+    res.json(lessons);
+  } catch (err) {
+    res.status(500).json({ message: 'خطأ في جلب الدروس' });
+  }
+});
+
+// جلب قائمة الامتحانات
+app.get('/api/exams', authenticate, async (req, res) => {
+  try {
+    const query = req.user.role === 'admin' ? {} : { grade: req.user.grade, stage: req.user.stage };
+    const exams = await Exam.find(query).select('-questions.correctAnswerIndex').sort({ createdAt: -1 });
+    res.json(exams);
+  } catch (err) {
+    res.status(500).json({ message: 'خطأ في جلب الامتحانات' });
+  }
+});
+
+// جلب امتحان محدد مع الأسئلة
+app.get('/api/exams/:id', authenticate, async (req, res) => {
+  try {
+    const exam = await Exam.findById(req.params.id).select('-questions.correctAnswerIndex');
+    if (!exam) return res.status(404).json({ message: 'الامتحان غير موجود' });
+    res.json(exam);
+  } catch (err) {
+    res.status(500).json({ message: 'خطأ في جلب تفاصيل الامتحان' });
+  }
+});
+
+// تسليم إجابات الامتحان وحساب الدرجة
+app.post('/api/exams/:id/submit', authenticate, async (req, res) => {
+  try {
+    const exam = await Exam.findById(req.params.id);
+    if (!exam) return res.status(404).json({ message: 'الامتحان غير موجود' });
+
+    const { answers } = req.body;
+    let score = 0;
+    const total = exam.questions.length;
+
+    exam.questions.forEach((q, index) => {
+      if (answers[index] === q.correctAnswerIndex) {
+        score++;
+      }
+    });
+
+    const percentage = Math.round((score / total) * 100);
+    const isPassed = percentage >= 50;
+
+    const newResult = new Result({
+      studentId: req.user._id,
+      studentName: req.user.name,
+      examId: exam._id,
+      examTitle: exam.title,
+      score,
+      total,
+      percentage,
+    });
+    await newResult.save();
 
     res.json({
-      user:
-        publicUser(user)
+      score,
+      totalScore: total,
+      percentage,
+      isPassed,
+      message: isPassed ? 'مبروك! لقد اجتزت الامتحان بنجاح 🌟' : 'حاول مرة أخرى في المرة القادمة 👍',
     });
-
-
-  } catch (error) {
-
-    res.status(500).json({
-      message: 'خطأ'
-    });
+  } catch (err) {
+    res.status(500).json({ message: 'خطأ في تقديم الإجابات' });
   }
 });
 
+// ==================== 5. لوحة المعلم (Admin Routes) ====================
 
-// ======================================================
-// الدروس
-// ======================================================
-
-app.get('/api/lessons', auth, async (req, res) => {
-
+// الطلاب المعلقون
+app.get('/api/admin/pending-students', authenticate, requireAdmin, async (req, res) => {
   try {
-
-    await connectDB();
-
-
-    const filter =
-      req.user.role === 'student'
-        ? { grade: req.user.grade }
-        : {};
-
-
-    const lessons =
-      await Lesson
-        .find(filter)
-        .sort({
-          createdAt: -1
-        })
-        .lean();
-
-
-    res.json(lessons);
-
-
-  } catch (error) {
-
-    res.status(500).json({
-      message: 'خطأ الدروس'
-    });
+    const students = await User.find({ role: 'student', status: 'pending' }).sort({ createdAt: -1 });
+    res.json(students);
+  } catch (err) {
+    res.status(500).json({ message: 'خطأ في جلب قائمة الطلاب' });
   }
 });
 
-
-// ======================================================
-// إضافة درس
-// ======================================================
-
-app.post(
-  '/api/admin/lessons',
-  auth,
-  adminOnly,
-  upload.single('pdfFile'),
-
-  async (req, res) => {
-
-    try {
-
-      await connectDB();
-
-
-      const {
-        title,
-        stage,
-        grade,
-        content,
-        videoUrl,
-        driveUrl
-      } = req.body;
-
-
-      if (!title) {
-
-        return res.status(400).json({
-          message: 'العنوان مطلوب'
-        });
-      }
-
-
-      const lesson =
-        await Lesson.create({
-
-          title,
-
-          stage,
-
-          grade,
-
-          content,
-
-          videoUrl,
-
-          driveUrl,
-
-          pdfUrl:
-            req.file
-              ? await uploadPdf(req.file)
-              : ''
-        });
-
-
-      res.status(201).json({
-
-        message:
-          'تم النشر',
-
-        data:
-          lesson
-      });
-
-
-    } catch (error) {
-
-      console.error(
-        'Lesson:',
-        error
-      );
-
-      res.status(500).json({
-        message: 'خطأ النشر'
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// حذف درس
-// ======================================================
-
-app.delete(
-  '/api/admin/lessons/:id',
-  auth,
-  adminOnly,
-
-  async (req, res) => {
-
-    try {
-
-      await connectDB();
-
-
-      if (
-        !validObjectId(
-          req.params.id
-        )
-      ) {
-
-        return res.status(400).json({
-          message: 'معرف خاطئ'
-        });
-      }
-
-
-      await Lesson.findByIdAndDelete(
-        req.params.id
-      );
-
-
-      res.json({
-        message: 'تم الحذف'
-      });
-
-
-    } catch (error) {
-
-      res.status(500).json({
-        message: 'خطأ'
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// الامتحانات
-// ======================================================
-
-app.get('/api/exams', auth, async (req, res) => {
-
+// الطلاب المقبولون
+app.get('/api/admin/approved-students', authenticate, requireAdmin, async (req, res) => {
   try {
-
-    await connectDB();
-
-
-    const filter =
-      req.user.role === 'student'
-        ? { grade: req.user.grade }
-        : {};
-
-
-    const exams =
-      await Exam
-        .find(filter)
-        .sort({
-          createdAt: -1
-        })
-        .select(
-          '-questions.correctAnswerIndex'
-        )
-        .lean();
-
-
-    res.json(exams);
-
-
-  } catch (error) {
-
-    res.status(500).json({
-      message: 'خطأ الامتحانات'
-    });
+    const students = await User.find({ role: 'student', status: 'approved' }).sort({ createdAt: -1 });
+    res.json(students);
+  } catch (err) {
+    res.status(500).json({ message: 'خطأ في جلب قائمة الطلاب' });
   }
 });
 
-
-// ======================================================
-// امتحان محدد
-// ======================================================
-
-app.get('/api/exams/:id', auth, async (req, res) => {
-
-  try {
-
-    await connectDB();
-
-
-    if (
-      !validObjectId(
-        req.params.id
-      )
-    ) {
-
-      return res.status(400).json({
-        message: 'معرف خاطئ'
-      });
-    }
-
-
-    const exam =
-      await Exam
-        .findById(
-          req.params.id
-        )
-        .select(
-          '-questions.correctAnswerIndex'
-        )
-        .lean();
-
-
-    if (!exam) {
-
-      return res.status(404).json({
-        message: 'غير موجود'
-      });
-    }
-
-
-    res.json(exam);
-
-
-  } catch (error) {
-
-    res.status(500).json({
-      message: 'خطأ'
-    });
-  }
-});
-
-
-// ======================================================
-// تسليم الامتحان
-// ======================================================
-
-app.post(
-  '/api/exams/:id/submit',
-  auth,
-
-  async (req, res) => {
-
-    try {
-
-      await connectDB();
-
-
-      if (
-        !validObjectId(
-          req.params.id
-        )
-      ) {
-
-        return res.status(400).json({
-          message: 'معرف خاطئ'
-        });
-      }
-
-
-      const exam =
-        await Exam.findById(
-          req.params.id
-        );
-
-
-      if (!exam) {
-
-        return res.status(404).json({
-          message: 'غير موجود'
-        });
-      }
-
-
-      let score = 0;
-
-
-      const answers =
-        req.body.answers || [];
-
-
-      exam.questions.forEach(
-        (q, i) => {
-
-          if (
-            answers[i] ===
-            q.correctAnswerIndex
-          ) {
-
-            score++;
-          }
-        }
-      );
-
-
-      const percentage =
-        Math.round(
-          (score /
-            exam.questions.length) *
-            100
-        );
-
-
-      const isPassed =
-        percentage >=
-        exam.passingScore;
-
-
-      const result =
-        await Result.create({
-
-          student:
-            req.user.id,
-
-          studentName:
-            req.user.name,
-
-          exam:
-            exam._id,
-
-          examTitle:
-            exam.title,
-
-          score,
-
-          total:
-            exam.questions.length,
-
-          percentage,
-
-          isPassed
-        });
-
-
-      res.status(201).json({
-
-        score,
-
-        totalScore:
-          exam.questions.length,
-
-        percentage,
-
-        isPassed,
-
-        message:
-          isPassed
-            ? 'مبروك!'
-            : 'حاول مجدداً'
-      });
-
-
-    } catch (error) {
-
-      console.error(
-        'Submit:',
-        error
-      );
-
-      res.status(500).json({
-        message: 'خطأ التسليم'
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// إنشاء امتحان
-// ======================================================
-
-app.post(
-  '/api/admin/exams',
-  auth,
-  adminOnly,
-
-  async (req, res) => {
-
-    try {
-
-      await connectDB();
-
-
-      const {
-        title,
-        stage,
-        grade,
-        questions
-      } = req.body;
-
-
-      if (
-        !title ||
-        !questions?.length
-      ) {
-
-        return res.status(400).json({
-          message: 'بيانات ناقصة'
-        });
-      }
-
-
-      await Exam.create({
-
-        title,
-
-        stage,
-
-        grade,
-
-        questions
-      });
-
-
-      res.status(201).json({
-        message: 'تم الإنشاء'
-      });
-
-
-    } catch (error) {
-
-      console.error(
-        'Exam:',
-        error
-      );
-
-      res.status(400).json({
-        message: 'خطأ في البيانات'
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// حذف امتحان
-// ======================================================
-
-app.delete(
-  '/api/admin/exams/:id',
-  auth,
-  adminOnly,
-
-  async (req, res) => {
-
-    try {
-
-      await connectDB();
-
-
-      if (
-        !validObjectId(
-          req.params.id
-        )
-      ) {
-
-        return res.status(400).json({
-          message: 'معرف خاطئ'
-        });
-      }
-
-
-      await Exam.findByIdAndDelete(
-        req.params.id
-      );
-
-
-      res.json({
-        message: 'تم الحذف'
-      });
-
-
-    } catch (error) {
-
-      res.status(500).json({
-        message: 'خطأ'
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// الطلاب - قيد الانتظار
-// ======================================================
-
-app.get(
-  '/api/admin/pending-students',
-  auth,
-  adminOnly,
-
-  async (req, res) => {
-
-    try {
-
-      await connectDB();
-
-
-      const students =
-        await User
-          .find({
-            status: 'pending',
-            role: 'student'
-          })
-          .select('-password')
-          .sort({
-            createdAt: -1
-          });
-
-
-      res.json(
-        students.map(publicUser)
-      );
-
-
-    } catch (error) {
-
-      res.status(500).json({
-        message: 'خطأ'
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// الطلاب - المقبولون
-// ======================================================
-
-app.get(
-  '/api/admin/approved-students',
-  auth,
-  adminOnly,
-
-  async (req, res) => {
-
-    try {
-
-      await connectDB();
-
-
-      const students =
-        await User
-          .find({
-            status: 'approved',
-            role: 'student'
-          })
-          .select('-password')
-          .sort({
-            createdAt: -1
-          });
-
-
-      res.json(
-        students.map(publicUser)
-      );
-
-
-    } catch (error) {
-
-      res.status(500).json({
-        message: 'خطأ'
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// قبول طالب
-// ======================================================
-
-app.post(
-  '/api/admin/approve-student/:id',
-  auth,
-  adminOnly,
-
-  async (req, res) => {
-
-    try {
-
-      await connectDB();
-
-
-      if (
-        !validObjectId(
-          req.params.id
-        )
-      ) {
-
-        return res.status(400).json({
-          message: 'معرف خاطئ'
-        });
-      }
-
-
-      await User.findByIdAndUpdate(
-        req.params.id,
-        {
-          status: 'approved'
-        }
-      );
-
-
-      res.json({
-        message: 'تم القبول'
-      });
-
-
-    } catch (error) {
-
-      res.status(500).json({
-        message: 'خطأ'
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// حذف طالب
-// ======================================================
-
-app.delete(
-  '/api/admin/students/:id',
-  auth,
-  adminOnly,
-
-  async (req, res) => {
-
-    try {
-
-      await connectDB();
-
-
-      if (
-        !validObjectId(
-          req.params.id
-        )
-      ) {
-
-        return res.status(400).json({
-          message: 'معرف خاطئ'
-        });
-      }
-
-
-      await User.findByIdAndDelete(
-        req.params.id
-      );
-
-
-      res.json({
-        message: 'تم الحذف'
-      });
-
-
-    } catch (error) {
-
-      res.status(500).json({
-        message: 'خطأ'
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// النتائج - للمعلم
-// ======================================================
-
-app.get(
-  '/api/admin/results',
-  auth,
-  adminOnly,
-
-  async (req, res) => {
-
-    try {
-
-      await connectDB();
-
-
-      const results =
-        await Result
-          .find()
-          .sort({
-            createdAt: -1
-          })
-          .limit(500);
-
-
-      res.json(results);
-
-
-    } catch (error) {
-
-      res.status(500).json({
-        message: 'خطأ'
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// النتائج - للطالب
-// ======================================================
-
-app.get(
-  '/api/student/results',
-  auth,
-
-  async (req, res) => {
-
-    try {
-
-      await connectDB();
-
-
-      const results =
-        await Result
-          .find({
-            student:
-              req.user.id
-          })
-          .sort({
-            createdAt: -1
-          });
-
-
-      res.json(results);
-
-
-    } catch (error) {
-
-      res.status(500).json({
-        message: 'خطأ'
-      });
-    }
-  }
-);
-
-
-// ======================================================
 // الإحصائيات
-// ======================================================
-
-app.get(
-  '/api/admin/stats',
-  auth,
-  adminOnly,
-
-  async (req, res) => {
-
-    try {
-
-      await connectDB();
-
-
-      const [
-        approvedStudentsCount,
-        pendingStudentsCount,
-        lessonsCount,
-        examsCount
-      ] = await Promise.all([
-
-        User.countDocuments({
-          status: 'approved',
-          role: 'student'
-        }),
-
-        User.countDocuments({
-          status: 'pending',
-          role: 'student'
-        }),
-
-        Lesson.countDocuments(),
-
-        Exam.countDocuments()
-      ]);
-
-
-      res.json({
-
-        approvedStudentsCount,
-
-        pendingStudentsCount,
-
-        lessonsCount,
-
-        examsCount
-      });
-
-
-    } catch (error) {
-
-      res.status(500).json({
-        message: 'خطأ'
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// رفع PDF إلى Vercel Blob
-// ======================================================
-
-async function uploadPdf(file) {
-
-  if (
-    !process.env.BLOB_READ_WRITE_TOKEN
-  ) {
-
-    return '';
-  }
-
-
+app.get('/api/admin/stats', authenticate, requireAdmin, async (req, res) => {
   try {
+    const approvedStudentsCount = await User.countDocuments({ role: 'student', status: 'approved' });
+    const pendingStudentsCount = await User.countDocuments({ role: 'student', status: 'pending' });
+    const lessonsCount = await Lesson.countDocuments();
+    const examsCount = await Exam.countDocuments();
 
-    const name =
-      `lessons/${Date.now()}-${crypto.randomUUID()}.pdf`;
-
-
-    const blob =
-      await put(
-        name,
-        file.buffer,
-        {
-          access: 'public',
-          contentType: 'application/pdf'
-        }
-      );
-
-
-    return blob.url;
-
-
-  } catch (error) {
-
-    console.error(
-      'Upload PDF:',
-      error.message
-    );
-
-    return '';
-  }
-}
-
-
-// ======================================================
-// معالجة أخطاء Multer
-// ======================================================
-
-app.use(
-  (error, req, res, next) => {
-
-    if (
-      error instanceof multer.MulterError
-    ) {
-
-      return res.status(400).json({
-        message:
-          'خطأ في رفع الملف'
-      });
-    }
-
-
-    if (
-      error?.message === 'PDF only'
-    ) {
-
-      return res.status(400).json({
-        message:
-          'يسمح برفع ملفات PDF فقط'
-      });
-    }
-
-
-    next(error);
-  }
-);
-
-
-// ======================================================
-// 404 للـ API
-// ======================================================
-
-app.use(
-  '/api',
-  (req, res) => {
-
-    res.status(404).json({
-      message:
-        'المسار غير موجود'
+    res.json({
+      approvedStudentsCount,
+      pendingStudentsCount,
+      lessonsCount,
+      examsCount,
     });
+  } catch (err) {
+    res.status(500).json({ message: 'خطأ في جلب الإحصائيات' });
   }
-);
+});
 
+// جميع النتائج
+app.get('/api/admin/results', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const results = await Result.find().sort({ createdAt: -1 });
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ message: 'خطأ في جلب النتائج' });
+  }
+});
 
-// ======================================================
-// التشغيل
-// ======================================================
+// قبول طالب
+app.post('/api/admin/approve-student/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.params.id, { status: 'approved' });
+    res.json({ message: 'تم قبول الطالب بنجاح' });
+  } catch (err) {
+    res.status(500).json({ message: 'خطأ في قبول الطالب' });
+  }
+});
 
-if (
-  process.env.NODE_ENV !== 'production'
-) {
+// حذف طالب
+app.delete('/api/admin/students/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ message: 'تم حذف الطالب بنجاح' });
+  } catch (err) {
+    res.status(500).json({ message: 'خطأ في حذف الطالب' });
+  }
+});
 
-  app.listen(
-    PORT,
-    () => {
+// إضافة درس جديد
+app.post('/api/admin/lessons', authenticate, requireAdmin, upload.single('pdfFile'), async (req, res) => {
+  try {
+    const { title, stage, grade, content, videoUrl, driveUrl } = req.body;
+    let pdfUrl = driveUrl || '';
 
-      console.log('');
-      console.log(
-        '======================================'
-      );
-
-      console.log(
-        `🚀 متاح على http://localhost:${PORT}`
-      );
-
-      console.log(
-        '======================================'
-      );
-
-      console.log('');
+    // إذا تم أرفاق ملف PDF كـ Buffer
+    if (req.file) {
+      const base64Pdf = req.file.buffer.toString('base64');
+      pdfUrl = `data:${req.file.mimetype};base64,${base64Pdf}`;
     }
-  );
+
+    const newLesson = new Lesson({
+      title,
+      stage,
+      grade,
+      content,
+      videoUrl,
+      driveUrl,
+      pdfUrl,
+    });
+
+    await newLesson.save();
+    res.status(201).json({ message: 'تم نشر الدرس بنجاح', lesson: newLesson });
+  } catch (err) {
+    res.status(500).json({ message: 'حدث خطأ في إضافة الدرس', error: err.message });
+  }
+});
+
+// إضافة امتحان جديد
+app.post('/api/admin/exams', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { title, stage, grade, questions } = req.body;
+
+    const newExam = new Exam({
+      title,
+      stage,
+      grade,
+      questions,
+    });
+
+    await newExam.save();
+    res.status(201).json({ message: 'تم إنشاء الامتحان بنجاح', exam: newExam });
+  } catch (err) {
+    res.status(500).json({ message: 'حدث خطأ في إنشاء الامتحان', error: err.message });
+  }
+});
+
+// ==================== 6. توجيه جميع الطلبات نحو index.html ====================
+
+app.get('*', (req, res) => {
+  // عدم تحويل مسارات API
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ message: 'المسار البرمجي غير موجود' });
+  }
+  res.sendFile(path.join(publicDirectoryPath, 'index.html'));
+});
+
+// ==================== 7. تشغيل الخادم والتصدير لـ Vercel ====================
+
+const PORT = process.env.PORT || 5000;
+
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 الخادم يعمل على المنفذ: http://localhost:${PORT}`);
+  });
 }
-
-
-// ======================================================
-// Vercel
-// ======================================================
 
 module.exports = app;
