@@ -1,15 +1,15 @@
 {
-  "name": "okasha-arabic-platform-backend",
+  "name": "okasha-arabic-platform",
   "version": "1.0.0",
   "private": true,
-  "description": "Backend for Okasha Arabic educational platform",
+  "description": "منصة أ/ أحمد عكاشة - تعليم اللغة العربية",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "dependencies": {
     "@vercel/blob": "^2.0.0",
