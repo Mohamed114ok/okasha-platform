@@ -721,7 +721,7 @@ app.get('/api/health', async (req, res) => {
 
     res.status(500).json({
       ok: false,
-      message: 'قاعدة البيانات غير متصلة'
+      message: 'قاعدة البيانات غير متصل��'
     });
   }
 });
@@ -1545,7 +1545,8 @@ app.get(
           .select('-password')
           .sort({
             createdAt: -1
-          });
+          })
+          .lean();
 
 
       res.json(
@@ -1588,7 +1589,8 @@ app.get(
           .select('-password')
           .sort({
             createdAt: -1
-          });
+          })
+          .lean();
 
 
       res.json(
@@ -1727,7 +1729,8 @@ app.get(
           .sort({
             createdAt: -1
           })
-          .limit(500);
+          .limit(500)
+          .lean();
 
 
       res.json(results);
@@ -1766,7 +1769,8 @@ app.get(
           })
           .sort({
             createdAt: -1
-          });
+          })
+          .lean();
 
 
       res.json(results);
